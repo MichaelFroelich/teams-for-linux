@@ -1,5 +1,5 @@
 
-const { shell, BrowserWindow } = require('electron');
+const { shell, BrowserWindow, session } = require('electron');
 const windowStateKeeper = require('electron-window-state');
 const path = require('path');
 const login = require('../login');
@@ -10,10 +10,10 @@ const notifications = require('../notifications');
 const onlineOffline = require('../onlineOffline');
 
 let aboutBlankRequestCount = 0;
-
 let window = null;
 
 exports.onAppReady = function onAppReady() {
+	console.log('onAppReady')
 	window = createWindow();
 	new Menus(window, config, iconPath);
 
@@ -27,7 +27,11 @@ exports.onAppReady = function onAppReady() {
 
 	window.webContents.on('new-window', onNewWindow);
 
-	window.webContents.session.webRequest.onBeforeRequest(['http*'], onBeforeRequestHandler);
+	const filter = {
+		urls: ['http*', 'msteams*']
+	}
+
+	session.defaultSession.webRequest.onBeforeRequest(filter, onBeforeRequestHandler);
 
 	login.handleLoginDialogTry(window);
 	if (config.onlineOfflineReload) {
@@ -37,10 +41,16 @@ exports.onAppReady = function onAppReady() {
 	window.webContents.setUserAgent(config.chromeUserAgent);
 
 	if (!config.minimized) {
-		window.once('ready-to-show', () => window.show());
+		window.once('ready-to-show', () => {
+			console.debug('ready-to-show')
+			window.webContents.executeJavaScript("document.getElementById('openTeamsClientInBrowser').click()");
+			window.show()
+		});
 	}
 
 	window.webContents.on('did-finish-load', () => {
+		console.log('did-finish-load');
+		window.webContents.executeJavaScript("document.getElementById('openTeamsClientInBrowser').click()");
 		customCSS.onDidFinishLoad(window.webContents);
 	});
 
@@ -53,7 +63,7 @@ exports.onAppReady = function onAppReady() {
 		window = null;
 	});
 
-	url = processArgs(process.argv)
+	const url = processArgs(process.argv)
 	window.loadURL( url ? url:config.url);
 
 	if (config.webDebug) {
@@ -63,11 +73,14 @@ exports.onAppReady = function onAppReady() {
 
 exports.onAppSecondInstance = function onAppSecondInstance(event, args) {
 	console.log('second-instance started');
+	aboutBlankRequestCount = 0;
+	let allowFurtherRequests = true;
 	if (window) {
 		event.preventDefault();
-		url = processArgs(args)
-		if (url) {
-			window.loadURL(url)
+		const url = processArgs(args)
+		if (url && allowFurtherRequests)  {
+			allowFurtherRequests = false;
+			setTimeout(() => { allowFurtherRequests = true}, 10000);
 		} else {
 			if (window.isMinimized()) window.restore();
 			window.focus();
@@ -84,21 +97,25 @@ function processArgs(args) {
 			return arg
 		}
 		if (arg.startsWith('msteams:/l/meetup-join/')) {
-			console.log('meetup-join argument received with msteams protocol');
+			const redirectUrl = 'https://teams.microsoft.com' + arg.substring(8, arg.length);
+			console.log('meetup-join argument received with msteams protocol', redirectUrl);
 			window.show()
-			pathMeetup = arg.substring(8, arg.length)
-			url = config.url + pathMeetup
-			return url
+			return redirectUrl
 		}
 	}
 }
 
 function onBeforeRequestHandler(details, callback) {
-	// Check if the counter was incremented
-	if (aboutBlankRequestCount < 1) {
+	console.debug('onBeforeRequestHandler, called with url', details.url);
+	if (details.url.startsWith('msteams')) {
+		console.debug('DEBUG - onBeforeRequestHandler msteams');
+		callback({ cancel: true });
+	} else if (aboutBlankRequestCount < 1) {
+		// Check if the counter was incremented
+		console.debug('DEBUG - onBeforeRequestHandler http');
 		// Proceed normally
-		callback({});
-	} else {
+		callback({ cancel: false});
+	} else if (!details.url.startsWith('msteams')){
 		// Open the request externally
 		console.debug('DEBUG - webRequest to  ' + details.url + ' intercepted!');
 		shell.openExternal(details.url);
@@ -109,7 +126,9 @@ function onBeforeRequestHandler(details, callback) {
 }
 
 function onNewWindow(event, url, frame, disposition, options) {
+	console.debug('DEBUG - onNewWindow');
 	if (url.startsWith('https://teams.microsoft.com/l/meetup-join')) {
+		console.debug('DEBUG - captured meeting');
 		event.preventDefault();
 	} else if (url === 'about:blank') {
 		event.preventDefault();
@@ -127,10 +146,11 @@ function onNewWindow(event, url, frame, disposition, options) {
 
 		event.newGuest = win;
 	} else if (disposition !== 'background-tab') {
+		console.debug('DEBUG - captured not background-tab');
 		event.preventDefault();
 		shell.openExternal(url);
 	}
-};
+}
 
 function createWindow() {
 	// Load the previous state with fallback to defaults

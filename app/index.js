@@ -11,12 +11,12 @@ if (config.proxyServer) app.commandLine.appendSwitch('proxy-server', config.prox
 app.commandLine.appendSwitch('auth-server-whitelist', config.authServerWhitelist);
 app.commandLine.appendSwitch('enable-ntlm-v2', config.ntlmV2enabled);
 app.commandLine.appendSwitch('try-supported-channel-layouts');
-app.setAsDefaultProtocolClient('msteams');
 
 if (!gotTheLock) {
 	console.warn('App already running');
 	app.quit();
 } else {
+	console.log('1st app instance');
 	app.on('second-instance', mainAppWindow.onAppSecondInstance);
 	app.on('ready', mainAppWindow.onAppReady);
 	app.on('before-quit', () => console.log('before-quit'));
@@ -24,4 +24,5 @@ if (!gotTheLock) {
 	app.on('renderer-process-crashed', () => console.log('renderer-process-crashed'));
 	app.on('will-quit', () => console.log('will-quit'));
 	app.on('certificate-error', certificate.onAppCertificateError);
+	app.setAsDefaultProtocolClient('msteams');
 }
