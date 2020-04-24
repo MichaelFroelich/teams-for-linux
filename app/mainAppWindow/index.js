@@ -13,6 +13,22 @@ let aboutBlankRequestCount = 0;
 
 let window = null;
 
+function processArgs(args) {
+	console.debug("processArgs", args);
+	for (const arg of args) {
+		if (arg.startsWith('https://teams.microsoft.com/l/meetup-join/')) {
+			console.log('meetup-join argument received with https protocol');
+			window.show();
+			return arg;
+		}
+		if (arg.startsWith('msteams:/l/meetup-join/')) {
+			console.log('meetup-join argument received with msteams protocol');
+			window.show();
+			return config.url + arg.substring(8, arg.length);
+		}
+	}
+}
+
 exports.onAppReady = function onAppReady() {
 	window = createWindow();
 	new Menus(window, config, iconPath);
@@ -86,21 +102,6 @@ exports.onAppSecondInstance = function onAppSecondInstance(event, args) {
 	}
 }
 
-function processArgs(args) {
-	console.debug("processArgs", args);
-	for (const arg of args) {
-		if (arg.startsWith('https://teams.microsoft.com/l/meetup-join/')) {
-			console.log('meetup-join argument received with https protocol');
-			window.show();
-			return arg;
-		}
-		if (arg.startsWith('msteams:/l/meetup-join/')) {
-			console.log('meetup-join argument received with msteams protocol');
-			window.show();
-			return config.url + arg.substring(8, arg.length);
-		}
-	}
-}
 
 function onBeforeRequestHandler(details, callback) {
 	// Check if the counter was incremented
@@ -139,7 +140,7 @@ function onNewWindow(event, url, frame, disposition, options) {
 		event.preventDefault();
 		shell.openExternal(url);
 	}
-};
+}
 
 function createWindow() {
 	// Load the previous state with fallback to defaults
